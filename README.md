@@ -1,88 +1,127 @@
 # LinkGuard
 
-LinkGuard is an AWS-native uptime and incident detection service for "money pages" like checkout links, booking pages, lead forms, and campaign landing pages.
+LinkGuard is a serverless link monitoring system built to detect broken business-critical links before they cost teams revenue.
 
-The flagship story for this project is not "I built a FastAPI app." It is "I designed a reliability-focused, event-driven system with clear tradeoffs, cost boundaries, and operational discipline."
+This project is being built as a practical AWS-first portfolio piece focused on event-driven architecture, queue-based processing, alerting, and observability.
 
-## Why this exists
+## Status
 
-Small teams lose revenue when critical links break and nobody notices for hours. LinkGuard checks those links on a fixed cadence, records evidence, opens incidents only after repeated failures, and alerts with enough context to act.
+Currently in active development.
 
-## V1 architecture
+Working on:
+- monitor CRUD
+- dispatcher flow
+- worker-based checks
+- incident logic
+- first AWS deployment
 
-- `apps/api`: FastAPI service for monitor and incident APIs. Designed to run locally with Uvicorn and in AWS Lambda with Mangum.
-- `apps/web`: React + Vite frontend for the operator dashboard and marketing site.
-- `infra/terraform`: Terraform entrypoint for API Gateway, Lambda, EventBridge Scheduler, SQS, DLQ, DynamoDB, SES, CloudWatch, and IAM.
-- `docs`: system design notes, decision log, and build-in-public timeline.
+## The problem
 
-## Current design choices
+Small teams often rely on a handful of critical links like checkout pages, booking flows, lead forms, or campaign landing pages. When one of those links breaks, the issue can sit unnoticed for hours and quietly cost money.
 
-- Compute: AWS Lambda first, not ECS.
-- Scheduling: one EventBridge Scheduler trigger wakes a dispatcher every minute.
-- Decoupling: dispatcher pushes due checks into SQS, workers consume from SQS.
-- Data: DynamoDB for monitors, incidents, and check history.
-- Alerts: SES first, webhooks later.
-- Observability: CloudWatch + X-Ray + Powertools first, Sentry later.
+LinkGuard is built to reduce that gap. It checks important links on a fixed cadence, records what happened, opens incidents only after repeated failures, and sends alerts with enough context to act on them.
 
-These are intentional defaults for a 2-week flagship MVP. They are documented in [docs/architecture.md](/Users/sohil/Documents/New project/docs/architecture.md), [docs/backend.md](/Users/sohil/Documents/New project/docs/backend.md), and [docs/decision-log.md](/Users/sohil/Documents/New project/docs/decision-log.md).
+## What LinkGuard does
 
-## Documentation index
+In its first version, LinkGuard focuses on a simple but realistic monitoring flow:
 
-- [Architecture](/Users/sohil/Documents/New project/docs/architecture.md): system shape, flows, component responsibilities, and scope boundaries.
-- [Backend Design](/Users/sohil/Documents/New project/docs/backend.md): what the FastAPI slice proves and how it maps to the eventual AWS path.
-- [Decision Log](/Users/sohil/Documents/New project/docs/decision-log.md): the reasoning trail you should be able to defend in interviews.
-- [Build In Public](/Users/sohil/Documents/New project/docs/build-in-public.md): 14-day execution and daily post structure.
+- create and manage monitors
+- check monitored URLs on a schedule
+- store check results
+- open incidents after repeated failures
+- resolve incidents after recovery
+- send email alerts
 
-## Repo structure
+The goal is not to build a huge monitoring platform. The goal is to build a small system with real reliability patterns and clear technical tradeoffs.
+
+## MVP scope
+
+The first vertical slice is:
+
+1. Create a monitor
+2. Find monitors that are due for a check
+3. Run the check
+4. Store the result
+5. Open an incident after repeated failures
+6. Send an alert
+
+Everything else is secondary to that flow.
+
+## Architecture
+
+### Current project layout
+
+- `apps/api` — FastAPI backend for monitor and incident APIs
+- `apps/web` — React + Vite frontend for dashboard and landing page
+- `infra/terraform` — Terraform for AWS infrastructure
+- `docs` — architecture notes, decision log, and build-in-public progress
+
+### Current design choices
+
+- **Compute:** AWS Lambda first, not ECS
+- **Scheduling:** one scheduler wakes a dispatcher every minute
+- **Queueing:** dispatcher sends due checks to SQS
+- **Workers:** check jobs are processed asynchronously by workers
+- **Data store:** DynamoDB for monitors, results, and incidents
+- **Alerts:** SES first, webhooks later
+- **Observability:** CloudWatch, X-Ray, and Powertools first; Sentry later
+
+These choices are meant to keep the MVP small, affordable, and easy to explain while still showing real cloud engineering patterns.
+
+## Why these choices
+
+This project is intentionally AWS-native and serverless-first.
+
+I chose Lambda because the workload is event-driven and low-ops.  
+I chose SQS because I wanted decoupling, retries, and buffering between scheduling and execution.  
+I chose DynamoDB because it fits monitor metadata, incident state, and time-based result storage well for this size of system.  
+I chose SES first because email is the simplest useful alerting channel for an MVP.
+
+As the project grows, I may add webhooks, richer incident context, and stronger UI workflows, but the core goal is to keep the design practical and defensible.
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Backend Design](docs/backend.md)
+- [Decision Log](docs/decision-log.md)
+- [Build in Public](docs/build-in-public.md)
+
+## Repository structure
 
 ```text
 apps/
   api/          FastAPI app and tests
   web/          React + Vite app
 docs/           Architecture and execution docs
-infra/terraform Terraform scaffold for AWS resources
-```
+infra/terraform Terraform for AWS resources
 
-## Local development
 
-API:
+## Near-term priorities:
 
-```bash
-cd apps/api
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-uvicorn app.main:app --reload
-```
+persist monitors and results cleanly
+implement dispatcher logic
+add queue-backed check workers
+open and resolve incidents based on repeated failures
+send SES alerts
+deploy the first AWS version with Terraform
+add observability and alarms
 
-Web:
+## Why I built this
 
-```bash
-cd apps/web
-npm install
-npm run dev
-```
+I’m building LinkGuard as a flagship cloud/backend project to get stronger at designing systems that feel operationally real, not just feature-complete.
 
-## First vertical slice
+The main goal is to practice and demonstrate:
 
-1. Create a monitor.
-2. Dispatcher finds due monitors.
-3. Worker checks target URL.
-4. Result is stored.
-5. Incident opens after repeated failures.
-6. Email alert fires.
+serverless architecture
+async job processing
+reliability-oriented design
+AWS infrastructure
+observability
+clear technical decision-making
 
-That is the MVP heartbeat. Everything else is secondary.
 
-## Current local backend endpoints
+## About me
 
-- `GET /health`
-- `POST /monitors`
-- `GET /monitors`
-- `GET /monitors/{monitor_id}`
-- `POST /monitors/{monitor_id}/pause`
-- `POST /monitors/{monitor_id}/resume`
-- `GET /monitors/{monitor_id}/results`
-- `POST /monitors/{monitor_id}/run-check`
-- `GET /dispatch/due-jobs`
-- `GET /incidents`
+I’m Sohil Marreddi, a software engineer focused on backend, cloud, and infrastructure-oriented projects.
+
+I’m using LinkGuard to deepen my understanding of serverless systems, async processing, observability, and production-minded design.
