@@ -1,8 +1,8 @@
 # LinkGuard
 
-LinkGuard is a serverless link monitoring system built to catch broken revenue-impacting links before they go unnoticed.
+LinkGuard is a serverless link monitoring system built to catch broken critical links before teams lose time or money
 
-I’m building it as an AWS-focused backend project to practice event-driven architecture, async job processing, alerting, and observability.
+I’m building it as an AWS centered focused backend project to practice event driven architecture, async job processing, alerting, and observability.
 
 ## What it does
 
