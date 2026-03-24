@@ -24,7 +24,14 @@ Small teams lose revenue when critical links break and nobody notices for hours.
 - Alerts: SES first, webhooks later.
 - Observability: CloudWatch + X-Ray + Powertools first, Sentry later.
 
-These are intentional defaults for a 2-week flagship MVP. They are documented in [docs/architecture.md](/Users/sohil/Documents/New project/docs/architecture.md) and [docs/decision-log.md](/Users/sohil/Documents/New project/docs/decision-log.md).
+These are intentional defaults for a 2-week flagship MVP. They are documented in [docs/architecture.md](/Users/sohil/Documents/New project/docs/architecture.md), [docs/backend.md](/Users/sohil/Documents/New project/docs/backend.md), and [docs/decision-log.md](/Users/sohil/Documents/New project/docs/decision-log.md).
+
+## Documentation index
+
+- [Architecture](/Users/sohil/Documents/New project/docs/architecture.md): system shape, flows, component responsibilities, and scope boundaries.
+- [Backend Design](/Users/sohil/Documents/New project/docs/backend.md): what the FastAPI slice proves and how it maps to the eventual AWS path.
+- [Decision Log](/Users/sohil/Documents/New project/docs/decision-log.md): the reasoning trail you should be able to defend in interviews.
+- [Build In Public](/Users/sohil/Documents/New project/docs/build-in-public.md): 14-day execution and daily post structure.
 
 ## Repo structure
 
@@ -66,3 +73,16 @@ npm run dev
 6. Email alert fires.
 
 That is the MVP heartbeat. Everything else is secondary.
+
+## Current local backend endpoints
+
+- `GET /health`
+- `POST /monitors`
+- `GET /monitors`
+- `GET /monitors/{monitor_id}`
+- `POST /monitors/{monitor_id}/pause`
+- `POST /monitors/{monitor_id}/resume`
+- `GET /monitors/{monitor_id}/results`
+- `POST /monitors/{monitor_id}/run-check`
+- `GET /dispatch/due-jobs`
+- `GET /incidents`

@@ -1,120 +1,216 @@
 # LinkGuard Architecture
 
-## Problem statement
+## Problem and user
 
-Creators and small teams often have one or two pages that directly convert revenue: checkout, booking, waitlist, sponsor, newsletter, or campaign landing pages. When one breaks, the failure is usually discovered by a customer first. LinkGuard exists to shorten that blind spot.
+LinkGuard exists for one narrow but expensive failure mode: a creator or small business has a revenue-critical page break, and they only find out after customers start dropping off. The user is not an SRE team buying a broad observability suite. The user is a small operator who needs incident-style monitoring for a handful of pages that matter financially.
 
-## Target user
+## System goal
 
-The initial user is a solo creator or small business that needs outside-in monitoring for a handful of critical links and wants incident-style alerts without buying an enterprise monitoring product.
+The goal of v1 is not generic uptime monitoring. The goal is to detect repeated failures on money pages, reduce noisy one-off alerts, and surface enough evidence that the user can act quickly.
 
-## V1 system
+## V1 component map
 
-### Public API
+```mermaid
+flowchart LR
+    U["User / Dashboard"] --> API["API Gateway HTTP API"]
+    API --> APP["FastAPI on Lambda"]
+    SCH["EventBridge Scheduler"] --> DSP["Dispatcher Lambda"]
+    DSP --> Q["SQS Check Queue"]
+    Q --> WRK["Worker Lambda"]
+    Q --> DLQ["Dead-Letter Queue"]
+    WRK --> DB["DynamoDB"]
+    WRK --> SES["SES"]
+    APP --> DB
+    APP --> CW["CloudWatch / X-Ray"]
+    DSP --> CW
+    WRK --> CW
+```
 
-- API Gateway HTTP API fronts the backend.
-- FastAPI runs in Lambda.
-- Lambda proxy integration keeps the request path simple and interviewable.
+## Why each service exists
 
-Why this exists:
-- It is enough for CRUD and light control-plane work.
-- It keeps operations overhead low.
-- It aligns with bursty, event-driven traffic.
+### API Gateway HTTP API
 
-### Scheduling path
+- Public entry point for monitor CRUD and incident reads.
+- Keeps the control plane separate from worker execution.
+- Good enough for a small, serverless API without REST API cost or complexity.
 
-- One EventBridge Scheduler trigger runs every minute.
-- The dispatcher finds monitors whose `next_check_at` is due.
-- The dispatcher enqueues one SQS message per due monitor.
+### FastAPI on Lambda
 
-Why this exists:
-- One shared schedule is easier to reason about than one schedule per monitor.
-- It gives a clean control plane for monitor updates.
-- It keeps the first version simpler while preserving a path to scale later.
+- Control-plane compute for monitor lifecycle and local-first iteration.
+- Easy to test locally and still maps cleanly to Lambda with Mangum.
+- Strong fit for low-traffic admin operations and a small product surface.
 
-### Check execution path
+### EventBridge Scheduler
 
-- An SQS-triggered worker Lambda executes the HTTP check.
-- The worker classifies the result into a small error taxonomy.
-- The worker writes the result and updates incident state.
+- Fires one dispatcher every minute.
+- Avoids the complexity of managing one schedule object per monitor in v1.
+- Keeps schedule ownership centralized and easy to explain.
 
-Why this exists:
-- SQS buffers bursts and decouples scheduling from execution.
-- Retries and DLQ handling come from managed primitives instead of custom code.
-- Workers can be rate-limited through queue and Lambda concurrency controls.
+### Dispatcher Lambda
 
-### Data model
+- Reads monitors due for execution.
+- Emits one check job per due monitor into SQS.
+- Exists to separate "when should work happen" from "do the work."
 
-- `monitors`: configuration, status, cadence, and alert settings.
-- `check_results`: time-series status, latency, HTTP status, and failure reason.
-- `incidents`: open and resolved incidents with counters and timestamps.
+### SQS + DLQ
 
-Why DynamoDB:
-- Good fit for key-value and time-series access patterns in v1.
-- Cheap at small scale with predictable operational overhead.
-- TTL is useful for expiring check history.
+- Buffers spikes if many monitors are due at once.
+- Preserves failed jobs for retry and diagnosis.
+- Gives a clean place to discuss backpressure, retries, and dead-letter behavior in interviews.
 
-### Alerts
+### Worker Lambda
 
-- SES is the first alert channel.
-- Slack, Discord, and generic webhooks come later.
+- Performs the actual HTTP check.
+- Normalizes failure reasons into a small taxonomy.
+- Updates results and incident state atomically at the application layer.
 
-Why SES first:
-- Real-world enough to matter.
-- Cheap to run.
-- Keeps v1 focused on the reliability loop rather than integrations sprawl.
+### DynamoDB
 
-### Observability
+- Stores monitors, check history, and incidents.
+- Fits the v1 access patterns better than a relational database that would mostly be used as key-value storage.
+- Supports TTL for aging out check history without a cleanup job.
 
-- CloudWatch metrics and alarms for system health.
-- X-Ray traces for request and worker tracing.
-- AWS Lambda Powertools for structured logs, tracing, and metrics.
-- Sentry later for app-level debugging once the system is deployed.
+### SES
 
-Why this exists:
-- A reliability product without observability is not credible.
-- Native AWS telemetry should be first because it covers the service boundaries you are actually building.
+- First real alerting channel.
+- Enough to close the loop from detection to notification.
+- Cheaper and simpler than building multiple integrations immediately.
 
-## Core reliability rules
+### CloudWatch, X-Ray, and Powertools
 
-- Do not alert on the first failed check.
-- Open an incident after 2 consecutive failures.
-- Resolve an incident after 2 consecutive successes.
-- Use idempotency keys for queued check execution.
-- Keep the DLQ retention longer than the source queue retention.
+- Metrics: queue depth, check latency, worker errors, incident opens.
+- Tracing: request flow and queue-to-worker execution path.
+- Structured logs: enough evidence to debug the reliability product itself.
 
-## Scope boundaries for the 2-week MVP
+## Request and execution flows
 
-In scope:
-- HTTP GET checks
-- expected status code
-- optional body substring match
-- fixed intervals: 1, 5, 15, 60 minutes
-- email alerts
-- incident feed
+### Control-plane flow
 
-Out of scope:
-- browser automation
-- screenshots
-- login flows
-- SMS
-- AI root-cause summaries
-- billing
-- multi-region failover
+```mermaid
+sequenceDiagram
+    participant User
+    participant API as API Gateway
+    participant App as FastAPI Lambda
+    participant DB as DynamoDB
 
-## Cost discipline
+    User->>API: POST /monitors
+    API->>App: Lambda proxy event
+    App->>DB: Put monitor item
+    DB-->>App: Monitor stored
+    App-->>API: 201 Created
+    API-->>User: Monitor response
+```
 
-The architecture is serverless-first because the MVP needs to be cheap, simple, and explainable.
+### Monitoring flow
 
-Expected cost drivers:
-- Lambda invocations
-- SQS requests
-- DynamoDB read/write volume
-- SES email sends
-- CloudWatch log retention
+```mermaid
+sequenceDiagram
+    participant Scheduler as EventBridge Scheduler
+    participant Dispatcher as Dispatcher Lambda
+    participant Queue as SQS
+    participant Worker as Worker Lambda
+    participant Target as Target URL
+    participant DB as DynamoDB
+    participant Email as SES
+
+    Scheduler->>Dispatcher: Wake every minute
+    Dispatcher->>DB: Query due monitors
+    Dispatcher->>Queue: Enqueue one job per monitor
+    Queue->>Worker: Deliver check job
+    Worker->>Target: HTTP GET
+    Worker->>DB: Persist result + update incident state
+    Worker->>Email: Send alert when incident opens
+```
+
+## Backend module boundaries
+
+- `routes/`: HTTP contract only. No decision-heavy business logic.
+- `services/checker.py`: perform and classify HTTP checks.
+- `services/monitoring.py`: apply incident policy and mutate monitor state.
+- `services/dispatcher.py`: expose the queue payload contract.
+- `services/repository.py`: storage abstraction for local-first development.
+- `domain.py`: product language and policy constants.
+
+This split matters because it keeps the interview story clean: route handlers are thin, policies live in one place, and storage can change without rewriting business logic.
+
+## Data model
+
+### Monitors
+
+Fields the system needs to know when and how to check a page:
+
+- `monitor_id`
+- `name`
+- `target_url`
+- `interval_minutes`
+- `timeout_seconds`
+- `expected_status_code`
+- `expected_substring`
+- `alert_email`
+- `status`
+- `consecutive_failures`
+- `consecutive_successes`
+- `next_check_at`
+
+### Check results
+
+Each result is evidence, not just a boolean:
+
+- `check_id`
+- `monitor_id`
+- `checked_at`
+- `status`
+- `latency_ms`
+- `http_status`
+- `failure_type`
+- `reason`
+- `response_excerpt`
+
+### Incidents
+
+The incident record captures the noisy-to-actionable boundary:
+
+- `incident_id`
+- `monitor_id`
+- `state`
+- `opening_reason`
+- `failure_count`
+- `last_observed_status`
+- `last_reason`
+- `opened_at`
+- `resolved_at`
+
+## Reliability policy
+
+These are product decisions, not implementation accidents:
+
+- Allowed check intervals are `1`, `5`, `15`, and `60` minutes only.
+- An incident opens after `2` consecutive failures.
+- An incident resolves after `2` consecutive successes.
+- Paused monitors are excluded from dispatch.
+- Failure reasons are normalized into `timeout`, `connection`, `status_mismatch`, `content_mismatch`, and `internal_error`.
+
+Those rules are what make LinkGuard feel operational rather than like a generic cron job.
+
+## Cost and scope discipline
+
+The architecture is intentionally conservative because this project needs to be cheap and explainable.
 
 Cost controls:
-- short log retention in non-prod
-- DynamoDB TTL for check history
-- limited check intervals in v1
-- static frontend on S3 + CloudFront later
+
+- Lambda instead of always-on compute
+- one shared scheduler instead of a complex control plane
+- DynamoDB TTL for check history later
+- short CloudWatch retention in non-prod
+- only a few supported intervals in v1
+- email-only alerting at the start
+
+Out of scope for the first 2 weeks:
+
+- browser automation
+- screenshots
+- login/session flows
+- SMS
+- AI-generated root-cause summaries
+- billing
+- multi-region failover

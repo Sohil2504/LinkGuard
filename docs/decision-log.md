@@ -44,24 +44,43 @@ This file exists so every important choice has a reason, a rejected alternative,
 - Risk: SES sandbox and identity verification can slow down early demos.
 - Revisit when: alert fatigue pushes users toward chat-based notifications.
 
-## Open decisions that need sign-off
+### D-006: Start local-first with an in-memory repository
 
-### O-001: GitHub repo shape
+- Why: it proves domain rules and API shape before cloud infrastructure slows iteration down.
+- Rejected alternative: wire DynamoDB immediately.
+- Why rejected: it would front-load plumbing before monitor policy and incident logic are stable.
+- Risk: local behavior can drift from production data access patterns if the adapter boundary is sloppy.
+- Revisit when: the first AWS vertical slice is ready.
 
-- Default recommendation: public repo named `linkguard`.
-- Why: this is a flagship and you want build-in-public momentum.
+### D-007: Keep week 1 alerting to email only
 
-### O-002: Persistence strategy during local-first development
+- Why: one real alerting path is enough to validate the loop from detection to action.
+- Rejected alternative: build Slack and webhook integrations immediately.
+- Why rejected: more integration surface without improving the core product behavior.
+- Risk: some users prefer chat-based alerts and will see email as weaker.
+- Revisit when: the email path is stable.
 
-- Default recommendation: in-memory repository for the first API scaffold, then swap to DynamoDB once the AWS slice starts.
-- Why: fastest path to proving API shape and incident logic without blocking on cloud provisioning.
+### D-008: Keep v1 checks to HTTP GET plus status and body match
 
-### O-003: Initial alert channel scope
+- Why: it delivers a real product while keeping the checker cheap and explainable.
+- Rejected alternative: start with browser automation and screenshots.
+- Why rejected: much higher cost and complexity before basic monitoring is proven.
+- Risk: some real failures only show up in logged-in or JavaScript-heavy flows.
+- Revisit when: the simple check pipeline is stable and users need deeper flows.
 
-- Default recommendation: email only in the first week.
-- Why: enough to validate the product loop without channel sprawl.
+## Open decisions to revisit later
 
-### O-004: Frontend priority
+### O-001: When to add Slack or generic webhooks
 
-- Default recommendation: basic operator dashboard in week 2, not a polished marketing site in week 1.
-- Why: the monitoring loop is the product; the dashboard is the interface to it.
+- Default recommendation: after SES is proven end to end.
+- Why: alerting breadth should follow a stable core loop, not replace it.
+
+### O-002: When to replace the local repository with DynamoDB
+
+- Default recommendation: as soon as the first AWS vertical slice is deployed.
+- Why: local-first was chosen for speed, not as a permanent storage strategy.
+
+### O-003: When to add browser-based checks
+
+- Default recommendation: only after the queue-backed worker path and incident loop are stable.
+- Why: browser checks should be an intentional expansion, not an excuse to avoid finishing the core system.

@@ -9,6 +9,7 @@ node_modules/
 .terraform/
 .terraform.lock.hcl
 coverage/
+*.egg-info/
 *.pyc
 *.pyo
 *.pyd
