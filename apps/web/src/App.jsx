@@ -1,6 +1,4 @@
 import { useState } from "react";
-
-import { createMonitor } from "./api";
 import { OperatorView } from "./OperatorView";
 
 const steps = [
@@ -30,11 +28,6 @@ const architecture = [
 
 export function App() {
   const [activeScreen, setActiveScreen] = useState("landing");
-  const [createdMonitorId, setCreatedMonitorId] = useState(null);
-  const [submissionState, setSubmissionState] = useState({
-    status: "idle",
-    message: "",
-  });
   const [monitorDraft, setMonitorDraft] = useState({
     name: "Spring checkout",
     url: "https://example.com/checkout",
@@ -51,32 +44,14 @@ export function App() {
     }));
   }
 
-  async function handleMonitorCreate(event) {
+  function handleMonitorCreate(event) {
     event.preventDefault();
-    setSubmissionState({ status: "submitting", message: "" });
-
-    try {
-      const monitor = await createMonitor(monitorDraft);
-      setCreatedMonitorId(monitor.monitor_id);
-      setSubmissionState({ status: "idle", message: "" });
-      setActiveScreen("operator");
-    } catch (error) {
-      setSubmissionState({
-        status: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "The monitor could not be saved to the LinkGuard API.",
-      });
-    }
+    setActiveScreen("operator");
   }
 
   if (activeScreen === "operator") {
     return (
-      <OperatorView
-        initialMonitorId={createdMonitorId}
-        onBack={() => setActiveScreen("landing")}
-      />
+      <OperatorView monitorDraft={monitorDraft} onBack={() => setActiveScreen("landing")} />
     );
   }
 
@@ -98,12 +73,9 @@ export function App() {
             <button
               className="button button-secondary"
               type="button"
-              onClick={() => {
-                setCreatedMonitorId(null);
-                setActiveScreen("operator");
-              }}
+              onClick={() => setActiveScreen("operator")}
             >
-              Open Operator View
+              Open Sample Dashboard
             </button>
           </div>
           <div className="signal-strip">
@@ -197,7 +169,6 @@ export function App() {
               <label className="field">
                 <span>Monitor name</span>
                 <input
-                  required
                   type="text"
                   value={monitorDraft.name}
                   onChange={(event) => updateDraft("name", event.target.value)}
@@ -207,7 +178,6 @@ export function App() {
               <label className="field field-full">
                 <span>Target URL</span>
                 <input
-                  required
                   type="url"
                   value={monitorDraft.url}
                   onChange={(event) => updateDraft("url", event.target.value)}
@@ -230,7 +200,6 @@ export function App() {
               <label className="field">
                 <span>Expected status</span>
                 <input
-                  required
                   type="number"
                   inputMode="numeric"
                   value={monitorDraft.statusCode}
@@ -250,7 +219,6 @@ export function App() {
               <label className="field field-full">
                 <span>Alert email</span>
                 <input
-                  required
                   type="email"
                   value={monitorDraft.alertEmail}
                   onChange={(event) => updateDraft("alertEmail", event.target.value)}
@@ -259,22 +227,13 @@ export function App() {
             </div>
 
             <div className="builder-footer">
-              <button
-                className="button button-primary"
-                type="submit"
-                disabled={submissionState.status === "submitting"}
-              >
-                {submissionState.status === "submitting"
-                  ? "Saving Monitor..."
-                  : "Continue To Operator View"}
+              <button className="button button-primary" type="submit">
+                Continue To Operator View
               </button>
               <p>
-                This now posts to the local FastAPI control plane. The next screen reads the
-                saved monitors back from the API.
+                Frontend-only for now. Submitting this prototype takes the user into the calm
+                operator dashboard state.
               </p>
-              {submissionState.status === "error" ? (
-                <p className="form-message form-message-error">{submissionState.message}</p>
-              ) : null}
             </div>
           </form>
 
@@ -322,7 +281,7 @@ export function App() {
             <h3>Why this version is the right starting point</h3>
             <ul>
               <li>Users do not need to connect any external platform to get value.</li>
-              <li>The setup flow now writes to the backend monitor model instead of local-only state.</li>
+              <li>The setup flow matches the backend monitor model we already have.</li>
               <li>One alert email keeps the product simple while the incident loop matures.</li>
               {architecture.map((item) => (
                 <li key={item}>{item}</li>
