@@ -2,6 +2,7 @@ import { useState } from "react";
 
 const sampleMonitors = [
   {
+    id: "sample-coaching-booking",
     name: "Coaching booking page",
     cadence: "Every 1 min",
     status: "Needs review",
@@ -22,6 +23,7 @@ const sampleMonitors = [
     ],
   },
   {
+    id: "sample-newsletter-waitlist",
     name: "Newsletter waitlist",
     cadence: "Every 15 min",
     status: "Healthy",
@@ -51,6 +53,7 @@ const focusChecklist = [
 
 function buildPrimaryMonitor(monitorDraft) {
   return {
+    id: "draft-monitor",
     name: monitorDraft.name || "Untitled monitor",
     cadence: `Every ${monitorDraft.cadence || "5"} min`,
     status: "Starting",
@@ -111,9 +114,9 @@ export function OperatorView({ monitorDraft, onBack }) {
   });
   const healthyCount = monitors.filter((monitor) => monitor.status === "Healthy").length;
   const attentionCount = monitors.filter((monitor) => monitor.status === "Needs review").length;
-  const [selectedMonitorName, setSelectedMonitorName] = useState(monitors[0].name);
+  const [selectedMonitorId, setSelectedMonitorId] = useState(monitors[0].id);
   const selectedMonitor =
-    monitors.find((monitor) => monitor.name === selectedMonitorName) ?? monitors[0];
+    monitors.find((monitor) => monitor.id === selectedMonitorId) ?? monitors[0];
 
   return (
     <main className="operator-shell">
@@ -169,15 +172,15 @@ export function OperatorView({ monitorDraft, onBack }) {
               <tbody>
                 {monitors.map((monitor) => (
                   <tr
-                    key={monitor.name}
+                    key={monitor.id}
                     className={
-                      monitor.name === selectedMonitor.name ? "operator-row-selected" : ""
+                      monitor.id === selectedMonitor.id ? "operator-row-selected" : ""
                     }
-                    onClick={() => setSelectedMonitorName(monitor.name)}
+                    onClick={() => setSelectedMonitorId(monitor.id)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        setSelectedMonitorName(monitor.name);
+                        setSelectedMonitorId(monitor.id);
                       }
                     }}
                     tabIndex={0}

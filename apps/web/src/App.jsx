@@ -44,8 +44,26 @@ export function App() {
     }));
   }
 
+  function isDraftValid(draft) {
+    const expectedStatusCode = Number(draft.statusCode);
+
+    return (
+      draft.name.trim().length >= 3 &&
+      draft.url.trim().length > 0 &&
+      Number.isInteger(expectedStatusCode) &&
+      expectedStatusCode >= 100 &&
+      expectedStatusCode <= 599 &&
+      draft.alertEmail.trim().length > 0
+    );
+  }
+
   function handleMonitorCreate(event) {
     event.preventDefault();
+
+    if (!isDraftValid(monitorDraft)) {
+      return;
+    }
+
     setActiveScreen("operator");
   }
 
@@ -169,6 +187,8 @@ export function App() {
               <label className="field">
                 <span>Monitor name</span>
                 <input
+                  required
+                  minLength={3}
                   type="text"
                   value={monitorDraft.name}
                   onChange={(event) => updateDraft("name", event.target.value)}
@@ -178,6 +198,7 @@ export function App() {
               <label className="field field-full">
                 <span>Target URL</span>
                 <input
+                  required
                   type="url"
                   value={monitorDraft.url}
                   onChange={(event) => updateDraft("url", event.target.value)}
@@ -200,6 +221,9 @@ export function App() {
               <label className="field">
                 <span>Expected status</span>
                 <input
+                  required
+                  min={100}
+                  max={599}
                   type="number"
                   inputMode="numeric"
                   value={monitorDraft.statusCode}
@@ -219,6 +243,7 @@ export function App() {
               <label className="field field-full">
                 <span>Alert email</span>
                 <input
+                  required
                   type="email"
                   value={monitorDraft.alertEmail}
                   onChange={(event) => updateDraft("alertEmail", event.target.value)}
@@ -227,7 +252,11 @@ export function App() {
             </div>
 
             <div className="builder-footer">
-              <button className="button button-primary" type="submit">
+              <button
+                className="button button-primary"
+                type="submit"
+                disabled={!isDraftValid(monitorDraft)}
+              >
                 Continue To Operator View
               </button>
               <p>
